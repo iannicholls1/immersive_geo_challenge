@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Immersive Geo Challenge V2</title>
+
+  <!--
+    Immersive Geo Challenge V2
+    No Google Maps API required.
+    Uses:
+      - Pannellum for 360° equirectangular panorama viewing
+      - Leaflet + OpenStreetMap for the guessing map
+
+    How to use:
+      1. Save this file as index.html.
+      2. Create a folder called images in the same repository.
+      3. Add your 360° panorama images into that folder.
+      4. Update the LOCATIONS list below with the image filenames and correct coordinates.
+      5. Upload to GitHub Pages.
+  -->
+
+  <!-- Leaflet map CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <!-- Pannellum 360 viewer CSS -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"
+  />
+
+  <style>
+    :root {
+      --bg: #080f1f;
+      --panel: rgba(15, 24, 48, 0.92);
+      --panel-strong: rgba(24, 36, 70, 0.96);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #ffffff;
+      --muted: #b9c5e6;
+      --accent: #4dd0e1;
+      --accent-2: #8b5cf6;
+      --success: #4ade80;
+      --warning: #facc15;
+      --danger: #fb7185;
+      --orange: #ffb347;
+      --shadow: 0 18px 45px rgba(0, 0, 0, 0.42);
+      --radius: 22px;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 10%, rgba(77, 208, 225, 0.22), transparent 28%),
+        radial-gradient(circle at 85% 12%, rgba(139, 92, 246, 0.24), transparent 30%),
+        radial-gradient(circle at 50% 100%, rgba(255, 179, 71, 0.16), transparent 36%),
+        linear-gradient(180deg, #06101f 0%, #0a1025 100%);
+    }
+
+    button,
+    input,
+    select {
+      font-family: inherit;
+    }
+
+    .app {
+      height: 100%;
+      width: 100%;
+      padding: 14px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 14px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 2fr repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.035));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .header-card {
+      padding: 18px 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 98px;
+    }
+
+    .header-card h1 {
+      margin: 0;
+      font-size: clamp(1.4rem, 2vw, 2.15rem);
+      letter-spacing: 0.3px;
+    }
+
+    .header-card p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: clamp(0.85rem, 1vw, 1rem);
+    }
+
+    .stat-card {
+      min-height: 98px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .label {
+      color: var(--muted);
+      text-transform: uppercase;
+      font-size: 0.82rem;
+      letter-spacing: 1px;
+      margin-bottom: 7px;
+    }
+
+    .value {
+      font-size: clamp(1.6rem, 2.4vw, 2.35rem);
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 2.2fr 1fr;
+      gap: 14px;
+    }
+
+    .scene-card,
+    .guess-card {
+      padding: 14px;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .section-header {
+      min-height: 52px;
+      padding: 2px 4px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .section-header h2 {
+      margin: 0;
+      font-size: clamp(1rem, 1.25vw, 1.25rem);
+    }
+
+    .section-header small {
+      display: block;
+      color: var(--muted);
+      margin-top: 4px;
+      font-size: 0.88rem;
+      line-height: 1.3;
+    }
+
+    .pills {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pill {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.08);
+      color: #e7eeff;
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+
+    .viewer-shell,
+    .map-shell {
+      min-height: 0;
+      flex: 1;
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: #050914;
+      position: relative;
+    }
+
+    #panorama,
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .map-shell {
+      min-height: 390px;
+    }
+
+    .viewer-shell::after {
+      content: "";
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(0,0,0,0.25), transparent 14%, transparent 86%, rgba(0,0,0,0.25)),
+        linear-gradient(180deg, rgba(0,0,0,0.18), transparent 22%, transparent 84%, rgba(0,0,0,0.28));
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .controls.single {
+      grid-template-columns: 1fr;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 17px;
+      min-height: 66px;
+      padding: 14px 16px;
+      color: #06101f;
+      font-weight: 900;
+      font-size: clamp(0.95rem, 1.05vw, 1.1rem);
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      transition: transform 0.08s ease, filter 0.15s ease, opacity 0.15s ease;
+    }
+
+    .btn:hover {
+      filter: brightness(1.07);
+    }
+
+    .btn:active {
+      transform: scale(0.985);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      filter: grayscale(0.5);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #4dd0e1, #60a5fa);
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, #c4b5fd, #8b5cf6);
+      color: white;
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #86efac, #22c55e);
+    }
+
+    .btn-warning {
+      background: linear-gradient(135deg, #fde68a, #f59e0b);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #fda4af, #fb7185);
+    }
+
+    .status {
+      margin-top: 12px;
+      padding: 15px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.065);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: clamp(0.9rem, 0.95vw, 1rem);
+      min-height: 110px;
+    }
+
+    .status strong {
+      color: white;
+    }
+
+    .status .hint {
+      color: var(--warning);
+      font-weight: 800;
+    }
+
+    .status .good {
+      color: var(--success);
+      font-weight: 900;
+    }
+
+    .status .bad {
+      color: var(--danger);
+      font-weight: 900;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(circle at top left, rgba(77, 208, 225, 0.15), transparent 30%),
+        radial-gradient(circle at top right, rgba(139, 92, 246, 0.18), transparent 30%),
+        rgba(3, 7, 18, 0.9);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+    }
+
+    .overlay.hidden {
+      display: none;
+    }
+
+    .modal {
+      width: min(1050px, 95vw);
+      max-height: 92vh;
+      overflow: auto;
+      background: linear-gradient(180deg, rgba(23, 33, 64, 0.98), rgba(8, 14, 31, 0.98));
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 28px;
+      box-shadow: 0 28px 90px rgba(0,0,0,0.58);
+      padding: clamp(22px, 3vw, 38px);
+    }
+
+    .modal h2 {
+      margin: 0 0 10px;
+      font-size: clamp(1.9rem, 3.2vw, 3.4rem);
+      line-height: 1.05;
+    }
+
+    .modal p,
+    .modal li {
+      color: var(--muted);
+      font-size: clamp(1rem, 1.2vw, 1.15rem);
+      line-height: 1.6;
+    }
+
+    .modal ul {
+      margin: 16px 0 24px;
+    }
+
+    .modal-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .full-width {
+      grid-column: 1 / -1;
+    }
+
+    .big-score {
+      font-size: clamp(2.6rem, 6vw, 5.2rem);
+      font-weight: 900;
+      margin: 8px 0 4px;
+    }
+
+    .rank {
+      color: var(--warning);
+      font-size: clamp(1.2rem, 2vw, 1.7rem);
+      font-weight: 900;
+      margin-bottom: 16px;
+    }
+
+    .teacher-note {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(250, 204, 21, 0.1);
+      border: 1px solid rgba(250, 204, 21, 0.25);
+      color: #fff2b8;
+      line-height: 1.45;
+    }
+
+    .image-warning {
+      position: absolute;
+      inset: auto 16px 16px 16px;
+      z-index: 10;
+      padding: 14px 16px;
+      background: rgba(3, 7, 18, 0.86);
+      border: 1px solid rgba(250, 204, 21, 0.35);
+      border-radius: 16px;
+      color: #fff1b2;
+      font-size: 0.95rem;
+      line-height: 1.45;
+      display: none;
+    }
+
+    .leaflet-control-attribution {
+      font-size: 10px;
+    }
+
+    @media (max-width: 1200px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        height: auto;
+        min-height: 100%;
+      }
+
+      .topbar {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .header-card {
+        grid-column: 1 / -1;
+      }
+
+      .main {
+        grid-template-columns: 1fr;
+      }
+
+      .viewer-shell {
+        height: 58vh;
+        min-height: 430px;
+      }
+
+      .map-shell {
+        height: 48vh;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .topbar {
+        grid-template-columns: 1fr;
+      }
+
+      .modal-actions,
+      .controls {
+        grid-template-columns: 1fr;
+      }
+
+      .viewer-shell,
+      .map-shell {
+        min-height: 360px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <header class="topbar">
+      <section class="card header-card">
+        <h1>Immersive Geo Challenge</h1>
+        <p>No Google API. Explore the 360° scene, place your guess, and score points based on distance.</p>
+      </section>
+
+      <section class="card stat-card">
+        <div class="label">Round</div>
+        <div class="value" id="roundDisplay">0 / 5</div>
+      </section>
+
+      <section class="card stat-card">
+        <div class="label">Score</div>
+        <div class="value" id="scoreDisplay">0</div>
+      </section>
+
+      <section class="card stat-card">
+        <div class="label">Timer</div>
+        <div class="value" id="timerDisplay">90s</div>
+      </section>
+
+      <section class="card stat-card">
+        <div class="label">Distance</div>
+        <div class="value" id="distanceDisplay">—</div>
+      </section>
+    </header>
+
+    <main class="main">
+      <section class="card scene-card">
+        <div class="section-header">
+          <div>
+            <h2>360° Location Scene</h2>
+            <small>Drag to look around. Use visual clues: signs, buildings, roads, climate, language and landscape.</small>
+          </div>
+          <div class="pills">
+            <span class="pill">360° viewer</span>
+            <span class="pill">No Google API</span>
+            <span class="pill">Touch-ready</span>
+          </div>
+        </div>
+
+        <div class="viewer-shell">
+          <div id="panorama"></div>
+          <div class="image-warning" id="imageWarning">
+            Panorama image could not be loaded. Add the correct image file to the <strong>images</strong> folder or update the image URL in the LOCATIONS list.
+          </div>
+        </div>
+      </section>
+
+      <section class="card guess-card">
+        <div class="section-header">
+          <div>
+            <h2>Place Your Guess</h2>
+            <small>Tap the map to drop your marker, then submit.</small>
+          </div>
+        </div>
+
+        <div class="map-shell">
+          <div id="map"></div>
+        </div>
+
+        <div class="controls">
+          <button class="btn btn-secondary" id="hintBtn">Show Hint</button>
+          <button class="btn btn-primary" id="submitBtn" disabled>Submit Guess</button>
+        </div>
+
+        <div class="controls single">
+          <button class="btn btn-success" id="nextBtn" disabled>Next Round</button>
+        </div>
+
+        <div class="status" id="statusBox">
+          <strong>Ready to begin.</strong><br />
+          Press Start Game. A 360° panorama will load on the large screen. Students can work individually, in pairs or as teams.
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="overlay" id="startOverlay">
+    <div class="modal">
+      <h2>Immersive Geo Challenge</h2>
+      <p>
+        A GeoGuessr-style classroom game for the Immersive Room, using 360° panorama images instead of Google Street View.
+      </p>
+
+      <div class="pills" style="justify-content:flex-start; margin: 14px 0;">
+        <span class="pill">5 rounds</span>
+        <span class="pill">90 seconds per round</span>
+        <span class="pill">Team friendly</span>
+        <span class="pill">GitHub Pages ready</span>
+      </div>
+
+      <ul>
+        <li>Look carefully around the 360° scene.</li>
+        <li>Discuss clues with your team.</li>
+        <li>Tap the map to place your guess.</li>
+        <li>The closer your guess, the higher your score.</li>
+      </ul>
+
+      <div class="teacher-note">
+        <strong>Teacher setup:</strong> add your panorama images to an <strong>images</strong> folder and update the LOCATIONS list inside this HTML file. The starter locations below use placeholder filenames so you can add your own properly licensed images.
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary full-width" id="startBtn">Start Game</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="endOverlay">
+    <div class="modal">
+      <h2>Game Complete</h2>
+      <div class="big-score" id="finalScoreDisplay">0</div>
+      <div class="rank" id="rankDisplay">Explorer</div>
+      <div id="summaryText"></div>
+
+      <div class="modal-actions">
+        <button class="btn btn-success full-width" id="restartBtn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet map JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Pannellum 360 viewer JS -->
+  <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+  <script>
+    /***********************************************************************
+     * TEACHER SETTINGS
+     ***********************************************************************/
+
+    const TOTAL_ROUNDS = 5;
+    const ROUND_TIME = 90; // seconds
+
+    /*
+      IMPORTANT:
+      These starter locations use local image paths.
+
+      Create this folder structure in GitHub:
+
+        your-repository/
+        ├── index.html
+        └── images/
+            ├── paris-eiffel.jpg
+            ├── london-westminster.jpg
+            ├── rome-colosseum.jpg
+            ├── tokyo-shibuya.jpg
+            ├── sydney-harbour.jpg
+            ├── new-york-times-square.jpg
+            ├── dubai-burj-khalifa.jpg
+            ├── cairo-pyramids.jpg
+            ├── rio-copacabana.jpg
+            └── cape-town-waterfront.jpg
+
+      Each image should ideally be an equirectangular 360° panorama.
+      A 2:1 ratio is best, for example:
+        4096 x 2048
+        6000 x 3000
+        8192 x 4096
+
+      You can also use full URLs for image, for example:
+        image: "https://example.com/my-panorama.jpg"
+
+      Make sure your images are:
+        - your own, OR
+        - openly licensed, OR
+        - generated/created for your project.
+    */
+
+    const LOCATIONS = [
+      {
+        name: "Eiffel Tower",
+        country: "France",
+        lat: 48.85837,
+        lng: 2.29448,
+        image: "images/paris-eiffel.jpg",
+        hint: "A famous iron landmark in a European capital city.",
+        yaw: 80,
+        pitch: 0,
+        hfov: 105
+      },
+      {
+        name: "Westminster",
+        country: "United Kingdom",
+        lat: 51.5007,
+        lng: -0.1246,
+        image: "images/london-westminster.jpg",
+        hint: "A river, a clock tower, and a famous government area.",
+        yaw: 120,
+        pitch: 0,
+        hfov: 105
+      },
+      {
+        name: "Colosseum",
+        country: "Italy",
+        lat: 41.8902,
+        lng: 12.4922,
+        image: "images/rome-colosseum.jpg",
+        hint: "An ancient amphitheatre in southern Europe.",
+        yaw: 135,
+        pitch: 0,
+        hfov: 105
+      },
+      {
+        name: "Shibuya Crossing",
+        country: "Japan",
+        lat: 35.6595,
+        lng: 139.7005,
+        image: "images/tokyo-shibuya.jpg",
+        hint: "A busy crossing in a large Asian city.",
+        yaw: 180,
+        pitch: 0,
+        hfov: 105
+      },
+      {
+        name: "Sydney Harbour",
+        country: "Australia",
+        lat: -33.8568,
+        lng: 151.2153,
+        image: "images/sydney-harbour.jpg",
+        hint: "A famous harbour city in the Southern Hemisphere.",
+        yaw: 220,
+        pitch: 0,
+        hfov: 105
+      },
+      {
+        name: "Times Square",
+        country: "United States",
+        lat: 40.758,
+        lng: -73.9855,
+        image: "images/new-york-times-square.jpg",
+        hint: "Bright billboards and a very busy city square.",
+        yaw: 40,
+        pitch: 0,
+        hfov: 105
+      },
+      {
+        name: "Burj Khalifa",
+        country: "United Arab Emirates",
+        lat: 25.1972,
+        lng: 55.2744,
+        image: "images/dubai-burj-khalifa.jpg",
+        hint: "The tallest building in the world.",
+        yaw: 20,
+        pitch: 2,
+        hfov: 105
+      },
+      {
+        name: "Pyramids of Giza",
+        country: "Egypt",
+        lat: 29.9792,
+        lng: 31.1342,
+        image: "images/cairo-pyramids.jpg",
+        hint: "Ancient monuments in a desert landscape.",
+        yaw: 80,
+        pitch: 0,
+        hfov: 105
+      },
+      {
+        name: "Copacabana",
+        country: "Brazil",
+        lat: -22.9711,
+        lng: -43.1822,
+        image: "images/rio-copacabana.jpg",
+        hint: "A famous beach in South America.",
+        yaw: 90,
+        pitch: 0,
+        hfov: 105
+      },
+      {
+        name: "Cape Town Waterfront",
+        country: "South Africa",
+        lat: -33.907,
+        lng: 18.419,
+        image: "images/cape-town-waterfront.jpg",
+        hint: "A harbour area near a famous flat-topped mountain.",
+        yaw: 145,
+        pitch: 0,
+        hfov: 105
+      }
+    ];
+
+    /***********************************************************************
+     * GAME STATE
+     ***********************************************************************/
+
+    let viewer;
+    let map;
+
+    let gameLocations = [];
+    let currentRound = 0;
+    let currentLocation = null;
+    let currentGuess = null;
+
+    let totalScore = 0;
+    let timeLeft = ROUND_TIME;
+    let timerInterval = null;
+
+    let guessMarker = null;
+    let actualMarker = null;
+    let resultLine = null;
+
+    let roundSubmitted = false;
+    let hintShown = false;
+
+    /***********************************************************************
+     * DOM ELEMENTS
+     ***********************************************************************/
+
+    const roundDisplay = document.getElementById("roundDisplay");
+    const scoreDisplay = document.getElementById("scoreDisplay");
+    const timerDisplay = document.getElementById("timerDisplay");
+    const distanceDisplay = document.getElementById("distanceDisplay");
+    const statusBox = document.getElementById("statusBox");
+    const submitBtn = document.getElementById("submitBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const hintBtn = document.getElementById("hintBtn");
+    const startOverlay = document.getElementById("startOverlay");
+    const endOverlay = document.getElementById("endOverlay");
+    const startBtn = document.getElementById("startBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const finalScoreDisplay = document.getElementById("finalScoreDisplay");
+    const rankDisplay = document.getElementById("rankDisplay");
+    const summaryText = document.getElementById("summaryText");
+    const imageWarning = document.getElementById("imageWarning");
+
+    /***********************************************************************
+     * INITIALISE
+     ***********************************************************************/
+
+    initMap();
+    initViewer();
+
+    startBtn.addEventListener("click", startGame);
+    restartBtn.addEventListener("click", restartGame);
+    submitBtn.addEventListener("click", () => submitGuess(false));
+    nextBtn.addEventListener("click", nextRound);
+    hintBtn.addEventListener("click", showHint);
+
+    window.addEventListener("resize", () => {
+      setTimeout(() => {
+        if (map) map.invalidateSize();
+      }, 150);
+    });
+
+    /***********************************************************************
+     * MAP
+     ***********************************************************************/
+
+    function initMap() {
+      map = L.map("map", {
+        zoomControl: true,
+        worldCopyJump: true,
+        minZoom: 2,
+        maxZoom: 8
+      }).setView([20, 0], 2);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 8,
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+
+      map.on("click", (e) => {
+        if (!currentLocation || roundSubmitted) return;
+        placeGuess(e.latlng.lat, e.latlng.lng);
+      });
+    }
+
+    function placeGuess(lat, lng) {
+      currentGuess = { lat, lng };
+
+      if (guessMarker) {
+        guessMarker.setLatLng([lat, lng]);
+      } else {
+        guessMarker = L.marker([lat, lng]).addTo(map);
+      }
+
+      submitBtn.disabled = false;
+
+      statusBox.innerHTML = `
+        <strong>Guess placed.</strong><br>
+        Tap Submit Guess when your team is ready.
+      `;
+    }
+
+    /***********************************************************************
+     * PANORAMA VIEWER
+     ***********************************************************************/
+
+    function initViewer() {
+      viewer = pannellum.viewer("panorama", {
+        type: "equirectangular",
+        panorama: "",
+        autoLoad: false,
+        showControls: true,
+        compass: false,
+        keyboardZoom: false,
+        mouseZoom: true,
+        draggable: true,
+        hfov: 105,
+        minHfov: 65,
+        maxHfov: 120,
+        yaw: 0,
+        pitch: 0,
+        backgroundColor: [5, 9, 20]
+      });
+    }
+
+    function loadPanorama(location) {
+      imageWarning.style.display = "none";
+
+      try {
+        viewer.destroy();
+      } catch (error) {
+        // Safe to ignore during first load
+      }
+
+      viewer = pannellum.viewer("panorama", {
+        type: "equirectangular",
+        panorama: location.image,
+        autoLoad: true,
+        showControls: true,
+        compass: false,
+        keyboardZoom: false,
+        mouseZoom: true,
+        draggable: true,
+        hfov: location.hfov || 105,
+        minHfov: 65,
+        maxHfov: 120,
+        yaw: location.yaw || 0,
+        pitch: location.pitch || 0,
+        backgroundColor: [5, 9, 20],
+        preview: ""
+      });
+
+      /*
+        Pannellum does not always expose a neat failed-image callback across setups,
+        so this provides a simple classroom-friendly warning if the local image path
+        is probably not available yet.
+      */
+      setTimeout(() => {
+        const canvas = document.querySelector("#panorama canvas");
+        if (!canvas && currentLocation === location) {
+          imageWarning.style.display = "block";
+        }
+      }, 2500);
+    }
+
+    /***********************************************************************
+     * GAME FLOW
+     ***********************************************************************/
+
+    function startGame() {
+      startOverlay.classList.add("hidden");
+
+      totalScore = 0;
+      currentRound = 0;
+      gameLocations = shuffleArray([...LOCATIONS]).slice(0, TOTAL_ROUNDS);
+
+      distanceDisplay.textContent = "—";
+      scoreDisplay.textContent = "0";
+
+      nextRound();
+    }
+
+    function restartGame() {
+      endOverlay.classList.add("hidden");
+      clearMapOverlays();
+      startGame();
+    }
+
+    function nextRound() {
+      clearInterval(timerInterval);
+      clearMapOverlays();
+
+      currentGuess = null;
+      currentLocation = null;
+      roundSubmitted = false;
+      hintShown = false;
+
+      submitBtn.disabled = true;
+      nextBtn.disabled = true;
+      hintBtn.disabled = false;
+
+      currentRound++;
+
+      if (currentRound > TOTAL_ROUNDS) {
+        endGame();
+        return;
+      }
+
+      currentLocation = gameLocations[currentRound - 1];
+      loadPanorama(currentLocation);
+
+      timeLeft = ROUND_TIME;
+      updateDisplays();
+      startTimer();
+
+      statusBox.innerHTML = `
+        <strong>Round ${currentRound} of ${TOTAL_ROUNDS}</strong><br>
+        Explore the 360° scene. Look for clues, then tap the map to place your guess.
+      `;
+
+      setTimeout(() => {
+        map.invalidateSize();
+        map.setView([20, 0], 2);
+      }, 200);
+    }
+
+    function submitGuess(autoSubmit) {
+      if (roundSubmitted) return;
+
+      if (!currentGuess) {
+        statusBox.innerHTML = `
+          <strong>No guess selected.</strong><br>
+          Tap the map first to place a marker.
+        `;
+        return;
+      }
+
+      roundSubmitted = true;
+      clearInterval(timerInterval);
+
+      submitBtn.disabled = true;
+      nextBtn.disabled = false;
+      hintBtn.disabled = true;
+
+      const actual = {
+        lat: currentLocation.lat,
+        lng: currentLocation.lng
+      };
+
+      const distanceKm = haversineDistance(
+        currentGuess.lat,
+        currentGuess.lng,
+        actual.lat,
+        actual.lng
+      );
+
+      const roundScore = calculateScore(distanceKm);
+      totalScore += roundScore;
+
+      actualMarker = L.marker([actual.lat, actual.lng]).addTo(map);
+      actualMarker.bindPopup(`<strong>${currentLocation.name}</strong><br>${currentLocation.country}`).openPopup();
+
+      resultLine = L.polyline(
+        [
+          [currentGuess.lat, currentGuess.lng],
+          [actual.lat, actual.lng]
+        ],
+        {
+          weight: 4,
+          opacity: 0.85,
+          dashArray: "10, 10"
+        }
+      ).addTo(map);
+
+      const bounds = L.latLngBounds([
+        [currentGuess.lat, currentGuess.lng],
+        [actual.lat, actual.lng]
+      ]);
+
+      map.fitBounds(bounds.pad(0.45));
+
+      distanceDisplay.textContent = formatDistance(distanceKm);
+      scoreDisplay.textContent = totalScore.toLocaleString();
+
+      const closenessText = getClosenessText(distanceKm);
+
+      statusBox.innerHTML = `
+        <strong>Round Result</strong><br>
+        Correct location: <strong>${currentLocation.name}, ${currentLocation.country}</strong><br>
+        Your distance: <strong>${formatDistance(distanceKm)}</strong><br>
+        Round score: <strong class="good">${roundScore.toLocaleString()} points</strong><br>
+        ${closenessText}
+        ${autoSubmit ? `<br><span class="bad">Time ran out, so your current guess was submitted.</span>` : ""}
+      `;
+    }
+
+    function showHint() {
+      if (!currentLocation || hintShown || roundSubmitted) return;
+
+      hintShown = true;
+
+      statusBox.innerHTML = `
+        <strong>Hint:</strong><br>
+        <span class="hint">${currentLocation.hint}</span>
+      `;
+    }
+
+    function endGame() {
+      clearInterval(timerInterval);
+
+      finalScoreDisplay.textContent = `${totalScore.toLocaleString()} points`;
+      rankDisplay.textContent = getRank(totalScore);
+
+      summaryText.innerHTML = `
+        <p>You completed <strong>${TOTAL_ROUNDS}</strong> rounds.</p>
+        <p>Use this as a team challenge, starter activity, enrichment task, ESOL vocabulary activity or geography lesson.</p>
+        <p>To customise it, replace the image files in the <strong>images</strong> folder and update the LOCATIONS list in the HTML.</p>
+      `;
+
+      endOverlay.classList.remove("hidden");
+    }
+
+    /***********************************************************************
+     * TIMER
+     ***********************************************************************/
+
+    function startTimer() {
+      clearInterval(timerInterval);
+
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        updateDisplays();
+
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+
+          if (!currentGuess) {
+            currentGuess = { lat: 20, lng: 0 };
+            placeGuess(20, 0);
+          }
+
+          submitGuess(true);
+        }
+      }, 1000);
+    }
+
+    function updateDisplays() {
+      roundDisplay.textContent = `${Math.min(currentRound, TOTAL_ROUNDS)} / ${TOTAL_ROUNDS}`;
+      scoreDisplay.textContent = totalScore.toLocaleString();
+      timerDisplay.textContent = `${timeLeft}s`;
+
+      if (timeLeft <= 10) {
+        timerDisplay.style.color = "var(--danger)";
+      } else if (timeLeft <= 25) {
+        timerDisplay.style.color = "var(--warning)";
+      } else {
+        timerDisplay.style.color = "white";
+      }
+    }
+
+    /***********************************************************************
+     * SCORING
+     ***********************************************************************/
+
+    function calculateScore(distanceKm) {
+      /*
+        Score curve:
+        Very close = near 5000
+        Medium distance = reduced score
+        Very far = small score
+
+        You can make it easier by changing 2200 to 3000.
+        You can make it harder by changing 2200 to 1200.
+      */
+      const score = 5000 * Math.exp(-distanceKm / 2200);
+      return Math.max(0, Math.round(score));
+    }
+
+    function getClosenessText(distanceKm) {
+      if (distanceKm < 5) return `<span class="good">Outstanding! Almost exactly right.</span>`;
+      if (distanceKm < 50) return `<span class="good">Excellent guess. Very close.</span>`;
+      if (distanceKm < 250) return `<span class="good">Strong guess. You were in the right area.</span>`;
+      if (distanceKm < 1000) return `<span class="hint">Not bad. You were in the wider region.</span>`;
+      return `<span class="bad">Tricky one. Look again at the clues in the scene.</span>`;
+    }
+
+    function getRank(score) {
+      if (score >= 22000) return "Master Explorer";
+      if (score >= 17000) return "Global Navigator";
+      if (score >= 12000) return "World Traveller";
+      if (score >= 7000) return "Curious Explorer";
+      return "Rookie Adventurer";
+    }
+
+    /***********************************************************************
+     * UTILITIES
+     ***********************************************************************/
+
+    function clearMapOverlays() {
+      if (guessMarker) {
+        map.removeLayer(guessMarker);
+        guessMarker = null;
+      }
+
+      if (actualMarker) {
+        map.removeLayer(actualMarker);
+        actualMarker = null;
+      }
+
+      if (resultLine) {
+        map.removeLayer(resultLine);
+        resultLine = null;
+      }
+
+      map.setView([20, 0], 2);
+      distanceDisplay.textContent = "—";
+    }
+
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) *
+        Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) ** 2;
+
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    function toRad(value) {
+      return value * Math.PI / 180;
+    }
+
+    function formatDistance(distanceKm) {
+      if (distanceKm < 1) {
+        return `${Math.round(distanceKm * 1000)} m`;
+      }
+
+      return `${Math.round(distanceKm).toLocaleString()} km`;
+    }
+
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const randomIndex = Math.floor(Math.random() * (i + 1));
+        [array[i], array[randomIndex]] = [array[randomIndex], array[i]];
+      }
+
+      return array;
+    }
+  </script>
+</body>
+</html>
